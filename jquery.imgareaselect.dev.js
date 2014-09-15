@@ -105,6 +105,12 @@ $.imgAreaSelect = function (img, options) {
         /* Aspect ratio to maintain (floating point number) */
         aspectRatio,
 
+        /* Snap to grid X, pixels */
+        snapX,
+
+        /* Snap to grid Y, pixels */
+        snapY,
+
         /* Are the plugin elements currently displayed? */
         shown,
 
@@ -204,6 +210,40 @@ $.imgAreaSelect = function (img, options) {
     }
 
     /**
+     * Snap coordinate to wherever it needs to be
+     *
+     * @param coord
+     *            Coordinate to snap
+     * @return Coordinate
+     */
+    function snapSingle(coord, isX) {
+        if (isX && snapX)
+            return snapX * round(coord/snapX);
+        else if (snapY)
+            return snapY * round(coord/snapY);
+        return coord;
+    }
+
+    /**
+     * Makes sure a selection is snapped properly
+     *
+     * @param selection
+     *              Selection to fix
+     * @return Selection
+     */
+    function snap(selection) {
+        if (snapX) {
+            selection.x1 = snapSingle(selection.x1, true);
+            selection.x2 = snapSingle(selection.x2, true);
+        }
+        if (snapY) {
+            selection.y1 = snapSingle(selection.y1, false);
+            selection.y2 = snapSingle(selection.y2, false);
+        }
+        return selection;
+    }
+
+    /**
      * Get the current selection
      *
      * @param noScale
@@ -214,12 +254,16 @@ $.imgAreaSelect = function (img, options) {
     function getSelection(noScale) {
         var sx = noScale || scaleX, sy = noScale || scaleY;
 
-        return { x1: round(selection.x1 * sx),
+        var _selection = { x1: round(selection.x1 * sx),
             y1: round(selection.y1 * sy),
             x2: round(selection.x2 * sx),
             y2: round(selection.y2 * sy),
             width: round(selection.x2 * sx) - round(selection.x1 * sx),
             height: round(selection.y2 * sy) - round(selection.y1 * sy) };
+
+        _selection = snap(_selection);
+        // console.log('getSelection', _selection);
+        return _selection;
     }
 
     /**
@@ -246,6 +290,8 @@ $.imgAreaSelect = function (img, options) {
             x2: round(x2 / sx || 0),
             y2: round(y2 / sy || 0)
         };
+        if (snapX || snapY)
+            selection = snap(selection);
 
         selection.width = selection.x2 - selection.x1;
         selection.height = selection.y2 - selection.y1;
@@ -511,6 +557,11 @@ $.imgAreaSelect = function (img, options) {
             x1 = viewX(selection[/w/.test(resize) ? 'x2' : 'x1']);
             y1 = viewY(selection[/n/.test(resize) ? 'y2' : 'y1']);
 
+            if (snapX || snapY) {
+                x1 = snapSingle(x1, true);
+                y1 = snapSingle(y1, false);
+            }
+
             $(document).mousemove(selectingMouseMove)
                 .one('mouseup', docMouseUp);
             $box.unbind('mousemove', areaMouseMove);
@@ -572,6 +623,10 @@ $.imgAreaSelect = function (img, options) {
          */
         x1 = min(x1, left + imgWidth);
         y1 = min(y1, top + imgHeight);
+        if (snapX || snapY) {
+            x1 = snapSingle(x1, true);
+            y1 = snapSingle(y1, false);
+        }
 
         if (abs(x2 - x1) < minWidth) {
             /* Selection width is smaller than minWidth */
@@ -595,6 +650,10 @@ $.imgAreaSelect = function (img, options) {
 
         x2 = max(left, min(x2, left + imgWidth));
         y2 = max(top, min(y2, top + imgHeight));
+        if (snapX || snapY) {
+            x2 = snapSingle(x2, true);
+            y2 = snapSingle(y2, false);
+        }
 
         fixAspectRatio(abs(x2 - x1) < abs(y2 - y1) * aspectRatio);
 
@@ -613,6 +672,8 @@ $.imgAreaSelect = function (img, options) {
         selection = { x1: selX(min(x1, x2)), x2: selX(max(x1, x2)),
             y1: selY(min(y1, y2)), y2: selY(max(y1, y2)),
             width: abs(x2 - x1), height: abs(y2 - y1) };
+        if (snapX || snapY)
+            selection = snap(selection);
 
         update();
 
@@ -649,6 +710,8 @@ $.imgAreaSelect = function (img, options) {
 
         $.extend(selection, { x1: selX(x1), y1: selY(y1), x2: selX(x2),
             y2: selY(y2) });
+        if (snapX || snapY)
+            selection = snap(selection);
 
         update();
 
@@ -666,6 +729,11 @@ $.imgAreaSelect = function (img, options) {
         x1 = max(left, min(startX + evX(event), left + imgWidth - selection.width));
         y1 = max(top, min(startY + evY(event), top + imgHeight - selection.height));
 
+        if (snapX || snapY) {
+            x1 = snapSingle(x1, true);
+            y1 = snapSingle(y1, false);
+        }
+
         doMove(x1, y1);
 
         event.preventDefault();
@@ -681,6 +749,7 @@ $.imgAreaSelect = function (img, options) {
 
         x2 = x1;
         y2 = y1;
+
         doResize();
 
         resize = '';
@@ -984,6 +1053,10 @@ $.imgAreaSelect = function (img, options) {
 
         /* Calculate the aspect ratio factor */
         aspectRatio = (d = (options.aspectRatio || '').split(/:/))[0] / d[1];
+
+        /* Snap to grid? */
+        snapX = (newOptions.snapX || options.snapX || null);
+        snapY = (newOptions.snapY || options.snapY || null);
 
         $img.add($outer).unbind('mousedown', imgMouseDown);
 
